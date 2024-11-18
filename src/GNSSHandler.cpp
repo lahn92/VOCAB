@@ -4,16 +4,15 @@
 #include "Haversine.h"
 
 void setupGNSS() {
+  Wire.begin(); // Initialize I2C communication
   Wire.setClock(400000);
   while (myGNSS.begin() == false) {
     Serial.println(F("u-blox GNSS not detected at default I2C address. Please check wiring. Retrying..."));
-    delay(1000);
   }
 
   Serial.println(F("u-blox GNSS module connected. Waiting for valid fix..."));
   while (!myGNSS.getFixType()) {
     Serial.print(".");
-    delay(1000);
   }
   Serial.println(F("GNSS fix acquired!"));
 
@@ -37,9 +36,12 @@ void printRELPOSNEDdata(UBX_NAV_RELPOSNED_data_t *ubxDataStruct) {
   Serial.print("relPosLength (m): ");
   Serial.println(((double)ubxDataStruct->relPosLength / 100) + ((double)ubxDataStruct->relPosHPLength / 10000), 4);
   Serial.print("relPosHeading (Deg): ");
-  Serial.println((double)ubxDataStruct->relPosHeading / 100000);
-
-  relPosHeadingDegrees = (double)ubxDataStruct->relPosHeading / 100000;
+  double rawHeading = (double)ubxDataStruct->relPosHeading / 100000;
+  relPosHeadingDegrees = rawHeading - 90;
+  if (relPosHeadingDegrees < 0) {
+    relPosHeadingDegrees += 360;
+  }
+  Serial.println(relPosHeadingDegrees);
 }
 
 void printLatLonSpeed() {
@@ -61,12 +63,18 @@ void printLatLonSpeed() {
 
   if (currentState == POS_STATE) {
     result = haversine(savedLat, savedLon, d_lat, d_lon);
+    result.bearing = result.bearing;
+    if (result.bearing < 0) {
+      result.bearing += 360;
+    }
     Serial.print("Distance to saved point: ");
     Serial.print(result.distance);
     Serial.println(" meters");
     Serial.print("Bearing to saved point: ");
     Serial.print(result.bearing);
     Serial.println(" degrees");
+    Serial.print(" FORSKEL *********   ");
+    Serial.println(abs(result.bearing- relPosHeadingDegrees));
   }
 
   if (debugGNSS) {

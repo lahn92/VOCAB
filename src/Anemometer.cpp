@@ -1,61 +1,80 @@
 #include "Anemometer.h"
 
-Anemometer::Anemometer(int pin, int numReadings) 
-    : _pin(pin), _numReadings(numReadings), _currentReadingIndex(0), _sum(0), _directReading(0), _movingAverage(0) {
-    _readings = new float[numReadings];
-    for (int i = 0; i < numReadings; ++i) {
-        _readings[i] = 0;
-    }
-}
+Anemometer::Anemometer(int pin) 
+    : anemometerPin(pin), pulseCount(0), analogValue(0), lastAnalogValue(0), previousMillis(0), pulseDetected(false), debugMode(false), totalWindSpeed(0), measurementCount(0), startMillis(0) {}
 
-Anemometer::~Anemometer() {
-    delete[] _readings;
+void Anemometer::setup() {
+    pinMode(anemometerPin, INPUT);
+    //Serial.begin(115200);
+    resetAverageCalculation();
 }
 
 void Anemometer::update() {
-    // Read the voltage from the anemometer
-    float voltage = analogRead(_pin) * (3.3 / 1023.0);
-    _directReading = voltageToSpeed(voltage);
+    unsigned long currentMillis = millis();
 
-    // Update the moving average
-    _sum -= _readings[_currentReadingIndex];
-    _readings[_currentReadingIndex] = _directReading;
-    _sum += _directReading;
+    // Sample the analog pin
+    samplePin();
 
-    _currentReadingIndex = (_currentReadingIndex + 1) % _numReadings;
-    _movingAverage = _sum / _numReadings;
-}
+    // Check if 1 second has passed
+    if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+        
+        // Calculate wind speed
+        float windSpeed = pulseCount * speedFactor;
+        totalWindSpeed += windSpeed;
+        measurementCount++;
 
-float Anemometer::getDirectReading() {
-    return _directReading;
-}
+        if (debugMode) {
+            Serial.print("Wind Speed: ");
+            Serial.print(windSpeed);
+            Serial.println(" m/s");
 
-float Anemometer::getMovingAverage() {
-    return _movingAverage;
-}
+            // Print current average wind speed
+            Serial.print("Current Average Wind Speed (last 10 minutes): ");
+            Serial.println(getAverageWindSpeed());
 
+            // Print pulses per second
+            Serial.print("Pulses per second: ");
+            Serial.println(pulseCount);
 
-void Anemometer::logReadingsToFile(const char* filename, bool serialEnabled) {
-    unsigned long time = millis();  // Use millis() as a placeholder for GNSS time
-    char buffer[100];
-    sprintf(buffer, "Time: %lu, Direct: %.2f m/s, Moving Avg: %.2f m/s", time, _directReading, _movingAverage);
-    if (serialEnabled) {
-        Serial.println(buffer);
-    }
-
-    FILE* file = fopen(filename, "a");
-    if (file != NULL) {
-        fprintf(file, "%s\n", buffer);
-        fclose(file);
-    } else {
-        if (serialEnabled) {
-            Serial.println("Failed to open file!");
+            // Reset average calculation every 10 minutes
+            if (currentMillis - startMillis >= 600000) { // 600000 milliseconds = 10 minutes
+                resetAverageCalculation();
+            }
         }
+
+        // Reset the pulse count for the next second
+        pulseCount = 0;
     }
 }
 
+void Anemometer::samplePin() {
+    analogValue = analogRead(anemometerPin); // Read the analog value from pin
 
-float Anemometer::voltageToSpeed(float voltage) {
-    // Convert voltage to wind speed
-    return (voltage - _voltageMin) / (_voltageMax - _voltageMin) * (_speedMax - _speedMin) + _speedMin;
+    // Check for a rising edge (low to high transition)
+    if (analogValue > threshold && lastAnalogValue <= threshold) {
+        pulseCount++;
+    }
+
+    // Update the last analog value
+    lastAnalogValue = analogValue;
+}
+
+float Anemometer::getWindSpeed() {
+    return pulseCount * speedFactor;
+}
+
+float Anemometer::getAverageWindSpeed() {
+    if (measurementCount == 0) return 0;
+    return totalWindSpeed / measurementCount;
+}
+
+void Anemometer::setDebug(bool debug) {
+    debugMode = debug;
+}
+
+void Anemometer::resetAverageCalculation() {
+    totalWindSpeed = 0;
+    measurementCount = 0;
+    startMillis = millis();
 }

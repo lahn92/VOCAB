@@ -10,8 +10,8 @@ const int throttlePinB = 6;
 int currentThrottleA = 1500;
 int currentThrottleB = 1500;
 unsigned long lastMillis = 0;
-const unsigned long rampInterval = 50;
-const int throttleIncrement = 60;
+const unsigned long rampInterval = 100;
+const int throttleIncrement = 5;
 
 unsigned long lastSignalTimeA = 0;
 unsigned long lastSignalTimeB = 0;
@@ -114,4 +114,3 @@ bool isControllerConnected() {
 
   return connectedA && connectedB;
 }
-	
